@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, BoardPost } from '@/lib/supabase'
 import Link from 'next/link'
@@ -13,6 +13,32 @@ export default function BoardDetail({ postId }: BoardDetailProps) {
   const router = useRouter()
   const [post, setPost] = useState<BoardPost | null>(null)
   const [loading, setLoading] = useState(true)
+
+  const fetchPost = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('board_posts')
+        .select('*')
+        .eq('id', postId)
+        .single()
+
+      if (error) {
+        console.error('게시글 조회 오류:', error.message || error.details || error)
+        
+        // 테이블이 없는 경우 안내
+        if (error.message && error.message.includes('does not exist')) {
+          console.log('board_posts 테이블이 없습니다. Supabase 대시보드에서 테이블을 생성해주세요.')
+        }
+        return
+      }
+
+      setPost(data)
+    } catch (error) {
+      console.error('게시글 조회 오류:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [postId])
 
   useEffect(() => {
     fetchPost()
@@ -58,33 +84,7 @@ export default function BoardDetail({ postId }: BoardDetailProps) {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [postId, router])
-
-  const fetchPost = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('board_posts')
-        .select('*')
-        .eq('id', postId)
-        .single()
-
-      if (error) {
-        console.error('게시글 조회 오류:', error.message || error.details || error)
-        
-        // 테이블이 없는 경우 안내
-        if (error.message && error.message.includes('does not exist')) {
-          console.log('board_posts 테이블이 없습니다. Supabase 대시보드에서 테이블을 생성해주세요.')
-        }
-        return
-      }
-
-      setPost(data)
-    } catch (error) {
-      console.error('게시글 조회 오류:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  }, [postId, router, fetchPost])
 
   const deletePost = async () => {
     if (!confirm('정말 삭제하시겠습니까?')) return

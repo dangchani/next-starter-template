@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase, BoardPost } from '@/lib/supabase'
 import Link from 'next/link'
 import RealtimeToast, { useRealtimeToast } from './RealtimeToast'
@@ -11,80 +11,7 @@ export default function BoardList() {
   const [realtimeStatus, setRealtimeStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting')
   const { messages, addMessage, removeMessage } = useRealtimeToast()
 
-  useEffect(() => {
-    console.log('BoardList 컴포넌트 마운트')
-    fetchPosts()
-    
-    // Realtime 구독 설정
-    const channel = supabase
-      .channel('board_posts_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'board_posts',
-        },
-        (payload) => {
-          console.log('INSERT 이벤트:', payload)
-          // 새 게시글을 목록 맨 위에 추가
-          setPosts(prevPosts => [payload.new as BoardPost, ...prevPosts])
-          addMessage('새 게시글이 작성되었습니다!', 'success')
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'board_posts',
-        },
-        (payload) => {
-          console.log('UPDATE 이벤트:', payload)
-          // 게시글 수정 시 해당 게시글만 업데이트
-          setPosts(prevPosts => 
-            prevPosts.map(post => 
-              post.id === payload.new.id ? payload.new as BoardPost : post
-            )
-          )
-          addMessage('게시글이 수정되었습니다!', 'info')
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'board_posts',
-        },
-        (payload) => {
-          console.log('DELETE 이벤트:', payload)
-          // 게시글 삭제 시 해당 게시글만 제거
-          setPosts(prevPosts => 
-            prevPosts.filter(post => post.id !== payload.old.id)
-          )
-          addMessage('게시글이 삭제되었습니다!', 'warning')
-        }
-      )
-      .subscribe((status) => {
-        console.log('Realtime 상태:', status)
-        if (status === 'SUBSCRIBED') {
-          setRealtimeStatus('connected')
-          addMessage('실시간 연결이 활성화되었습니다!', 'success')
-        } else {
-          setRealtimeStatus('disconnected')
-          addMessage('실시간 연결이 끊어졌습니다!', 'warning')
-        }
-      })
-
-    // 컴포넌트 언마운트 시 구독 해제
-    return () => {
-      console.log('BoardList 컴포넌트 언마운트, 채널 제거')
-      supabase.removeChannel(channel)
-    }
-  }, [])
-
-  const fetchPosts = async () => {
+  const fetchPosts = useCallback(async () => {
     try {
       console.log('fetchPosts 실행 중...')
       const { data, error } = await supabase
@@ -113,7 +40,84 @@ export default function BoardList() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  const handleAddMessage = useCallback((message: string, type: 'success' | 'info' | 'warning') => {
+    addMessage(message, type)
+  }, [addMessage])
+
+  useEffect(() => {
+    console.log('BoardList 컴포넌트 마운트')
+    fetchPosts()
+    
+    // Realtime 구독 설정
+    const channel = supabase
+      .channel('board_posts_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'board_posts',
+        },
+        (payload) => {
+          console.log('INSERT 이벤트:', payload)
+          // 새 게시글을 목록 맨 위에 추가
+          setPosts(prevPosts => [payload.new as BoardPost, ...prevPosts])
+          handleAddMessage('새 게시글이 작성되었습니다!', 'success')
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'board_posts',
+        },
+        (payload) => {
+          console.log('UPDATE 이벤트:', payload)
+          // 게시글 수정 시 해당 게시글만 업데이트
+          setPosts(prevPosts => 
+            prevPosts.map(post => 
+              post.id === payload.new.id ? payload.new as BoardPost : post
+            )
+          )
+          handleAddMessage('게시글이 수정되었습니다!', 'info')
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'board_posts',
+        },
+        (payload) => {
+          console.log('DELETE 이벤트:', payload)
+          // 게시글 삭제 시 해당 게시글만 제거
+          setPosts(prevPosts => 
+            prevPosts.filter(post => post.id !== payload.old.id)
+          )
+          handleAddMessage('게시글이 삭제되었습니다!', 'warning')
+        }
+      )
+      .subscribe((status) => {
+        console.log('Realtime 상태:', status)
+        if (status === 'SUBSCRIBED') {
+          setRealtimeStatus('connected')
+          handleAddMessage('실시간 연결이 활성화되었습니다!', 'success')
+        } else {
+          setRealtimeStatus('disconnected')
+          handleAddMessage('실시간 연결이 끊어졌습니다!', 'warning')
+        }
+      })
+
+    // 컴포넌트 언마운트 시 구독 해제
+    return () => {
+      console.log('BoardList 컴포넌트 언마운트, 채널 제거')
+      supabase.removeChannel(channel)
+    }
+  }, []) // 의존성 배열을 비워서 한 번만 실행되도록 함
 
   const deletePost = async (id: number) => {
     if (!confirm('정말 삭제하시겠습니까?')) return
@@ -162,7 +166,7 @@ export default function BoardList() {
             onClick={() => {
               console.log('수동 새로고침 실행')
               fetchPosts()
-              addMessage('목록을 새로고침했습니다!', 'info')
+              handleAddMessage('목록을 새로고침했습니다!', 'info')
             }}
             className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg"
           >

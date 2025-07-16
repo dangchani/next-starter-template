@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase, BoardPost } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 
 interface BoardFormProps {
   postId?: number
@@ -18,13 +18,7 @@ export default function BoardForm({ postId, isEdit = false }: BoardFormProps) {
   })
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    if (isEdit && postId) {
-      fetchPost()
-    }
-  }, [isEdit, postId])
-
-  const fetchPost = async () => {
+  const fetchPost = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('board_posts')
@@ -33,7 +27,7 @@ export default function BoardForm({ postId, isEdit = false }: BoardFormProps) {
         .single()
 
       if (error) {
-        console.error('게시글 조회 오류:', error)
+        console.error('게시글 조회 오류:', error.message || error.details || error)
         return
       }
 
@@ -47,7 +41,13 @@ export default function BoardForm({ postId, isEdit = false }: BoardFormProps) {
     } catch (error) {
       console.error('게시글 조회 오류:', error)
     }
-  }
+  }, [postId])
+
+  useEffect(() => {
+    if (isEdit && postId) {
+      fetchPost()
+    }
+  }, [isEdit, postId, fetchPost])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
