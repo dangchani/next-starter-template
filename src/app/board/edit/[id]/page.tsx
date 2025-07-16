@@ -1,6 +1,7 @@
 'use client'
 
 import dynamic from 'next/dynamic'
+import { use } from 'react'
 
 const BoardForm = dynamic(() => import('@/components/BoardForm'), {
   ssr: false,
@@ -8,11 +9,12 @@ const BoardForm = dynamic(() => import('@/components/BoardForm'), {
 })
 
 interface BoardEditPageProps {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 export default function BoardEditPage({ params }: BoardEditPageProps) {
-  return <BoardForm postId={parseInt(params.id)} isEdit={true} />
+  const { id } = use(params)
+  return <BoardForm postId={parseInt(id)} isEdit={true} />
 } 

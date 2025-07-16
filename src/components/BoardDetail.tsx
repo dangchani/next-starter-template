@@ -16,7 +16,49 @@ export default function BoardDetail({ postId }: BoardDetailProps) {
 
   useEffect(() => {
     fetchPost()
-  }, [postId])
+    
+    // Realtime 구독 설정 (특정 게시글의 변경사항만 모니터링)
+    const channel = supabase
+      .channel(`board_post_${postId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'board_posts',
+          filter: `id=eq.${postId}`,
+        },
+        (payload) => {
+          console.log('게시글 수정 이벤트:', payload)
+          // 게시글 수정 시 직접 업데이트
+          if (payload.new) {
+            setPost(payload.new as BoardPost)
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'board_posts',
+          filter: `id=eq.${postId}`,
+        },
+        (payload) => {
+          console.log('게시글 삭제 이벤트:', payload)
+          // 게시글이 삭제되면 목록으로 리다이렉트
+          router.push('/board')
+        }
+      )
+      .subscribe((status) => {
+        console.log(`게시글 ${postId} Realtime 상태:`, status)
+      })
+
+    // 컴포넌트 언마운트 시 구독 해제
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [postId, router])
 
   const fetchPost = async () => {
     try {

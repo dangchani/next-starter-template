@@ -1,6 +1,9 @@
 'use client'
 
+'use client'
+
 import dynamic from 'next/dynamic'
+import { use } from 'react'
 
 const BoardDetail = dynamic(() => import('@/components/BoardDetail'), {
   ssr: false,
@@ -8,11 +11,12 @@ const BoardDetail = dynamic(() => import('@/components/BoardDetail'), {
 })
 
 interface BoardDetailPageProps {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 export default function BoardDetailPage({ params }: BoardDetailPageProps) {
-  return <BoardDetail postId={parseInt(params.id)} />
+  const { id } = use(params)
+  return <BoardDetail postId={parseInt(id)} />
 } 

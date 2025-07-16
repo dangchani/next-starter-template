@@ -3,17 +3,90 @@
 import { useState, useEffect } from 'react'
 import { supabase, BoardPost } from '@/lib/supabase'
 import Link from 'next/link'
+import RealtimeToast, { useRealtimeToast } from './RealtimeToast'
 
 export default function BoardList() {
   const [posts, setPosts] = useState<BoardPost[]>([])
   const [loading, setLoading] = useState(true)
+  const [realtimeStatus, setRealtimeStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting')
+  const { messages, addMessage, removeMessage } = useRealtimeToast()
 
   useEffect(() => {
+    console.log('BoardList 컴포넌트 마운트')
     fetchPosts()
+    
+    // Realtime 구독 설정
+    const channel = supabase
+      .channel('board_posts_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'board_posts',
+        },
+        (payload) => {
+          console.log('INSERT 이벤트:', payload)
+          // 새 게시글을 목록 맨 위에 추가
+          setPosts(prevPosts => [payload.new as BoardPost, ...prevPosts])
+          addMessage('새 게시글이 작성되었습니다!', 'success')
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'board_posts',
+        },
+        (payload) => {
+          console.log('UPDATE 이벤트:', payload)
+          // 게시글 수정 시 해당 게시글만 업데이트
+          setPosts(prevPosts => 
+            prevPosts.map(post => 
+              post.id === payload.new.id ? payload.new as BoardPost : post
+            )
+          )
+          addMessage('게시글이 수정되었습니다!', 'info')
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'board_posts',
+        },
+        (payload) => {
+          console.log('DELETE 이벤트:', payload)
+          // 게시글 삭제 시 해당 게시글만 제거
+          setPosts(prevPosts => 
+            prevPosts.filter(post => post.id !== payload.old.id)
+          )
+          addMessage('게시글이 삭제되었습니다!', 'warning')
+        }
+      )
+      .subscribe((status) => {
+        console.log('Realtime 상태:', status)
+        if (status === 'SUBSCRIBED') {
+          setRealtimeStatus('connected')
+          addMessage('실시간 연결이 활성화되었습니다!', 'success')
+        } else {
+          setRealtimeStatus('disconnected')
+          addMessage('실시간 연결이 끊어졌습니다!', 'warning')
+        }
+      })
+
+    // 컴포넌트 언마운트 시 구독 해제
+    return () => {
+      console.log('BoardList 컴포넌트 언마운트, 채널 제거')
+      supabase.removeChannel(channel)
+    }
   }, [])
 
   const fetchPosts = async () => {
     try {
+      console.log('fetchPosts 실행 중...')
       const { data, error } = await supabase
         .from('board_posts')
         .select('*')
@@ -33,6 +106,7 @@ export default function BoardList() {
         return
       }
 
+      console.log('가져온 게시글 수:', data?.length || 0)
       setPosts(data || [])
     } catch (error) {
       console.error('게시글 조회 오류:', error)
@@ -66,15 +140,41 @@ export default function BoardList() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
+    <>
+      <RealtimeToast messages={messages} onRemove={removeMessage} />
+      <div className="max-w-4xl mx-auto p-6">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">게시판</h1>
-        <Link 
-          href="/board/write" 
-          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg"
-        >
-          글쓰기
-        </Link>
+        <div>
+          <h1 className="text-3xl font-bold">게시판</h1>
+          <div className="flex items-center mt-2">
+            <div className={`w-2 h-2 rounded-full mr-2 ${
+              realtimeStatus === 'connected' ? 'bg-green-500' : 
+              realtimeStatus === 'connecting' ? 'bg-yellow-500' : 'bg-red-500'
+            }`}></div>
+            <span className="text-sm text-gray-600">
+              {realtimeStatus === 'connected' ? '실시간 연결됨' : 
+               realtimeStatus === 'connecting' ? '연결 중...' : '연결 끊김'}
+            </span>
+          </div>
+        </div>
+        <div className="flex space-x-2">
+          <button
+            onClick={() => {
+              console.log('수동 새로고침 실행')
+              fetchPosts()
+              addMessage('목록을 새로고침했습니다!', 'info')
+            }}
+            className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg"
+          >
+            새로고침
+          </button>
+          <Link 
+            href="/board/write" 
+            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg"
+          >
+            글쓰기
+          </Link>
+        </div>
       </div>
 
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
@@ -148,5 +248,6 @@ export default function BoardList() {
         </table>
       </div>
     </div>
+    </>
   )
 } 
